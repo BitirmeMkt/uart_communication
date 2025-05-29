@@ -19,10 +19,16 @@ namespace uart_communication
       RCLCPP_ERROR(this->get_logger(), "Parameters has not been read");
     }
 
-    steering_angle_subscriber_.subscribe(this, steering_angle_topic_.c_str());
-    throttle_subscriber_.subscribe(this, throttle_topic_.c_str());
-    sync_ = std::make_shared<message_filters::Synchronizer<SyncPolicy>>(SyncPolicy(10000), steering_angle_subscriber_, throttle_subscriber_);
-    sync_->registerCallback(std::bind(&UartCommunication::receiver_callback, this, std::placeholders::_1, std::placeholders::_2));
+    // steering_angle_subscriber_.subscribe(this, steering_angle_topic_.c_str());
+    // throttle_subscriber_.subscribe(this, throttle_topic_.c_str());
+    // sync_ = std::make_shared<message_filters::Synchronizer<SyncPolicy>>(SyncPolicy(10000), steering_angle_subscriber_, throttle_subscriber_);
+    // sync_->registerCallback(std::bind(&UartCommunication::receiver_callback, this, std::placeholders::_1, std::placeholders::_2));
+
+    steering_angle_subscriber_ = this->create_subscription<std_msgs::msg::Float32>(
+        steering_angle_topic_.c_str(), 10, std::bind(&UartCommunication::steering_callback, this, std::placeholders::_1));
+
+    throttle_subscriber_ = this->create_subscription<std_msgs::msg::Float32>(
+        throttle_topic_.c_str(), 10, std::bind(&UartCommunication::throttle_callback, this, std::placeholders::_1));
 
     speed_publisher_ = this->create_publisher<std_msgs::msg::Float32>(speed_publisher_topic_.c_str(), 10);
 
@@ -31,8 +37,8 @@ namespace uart_communication
     if (stm->isOpen())
     {
       RCLCPP_INFO(this->get_logger(), "STM seri portu acildi: %s", stm->getPort().c_str());
-      // sender_timer_ = this->create_wall_timer(
-      //     std::chrono::milliseconds(sender_timer_value_), std::bind(&UartCommunication::sender_timer_callback, this));
+      sender_timer_ = this->create_wall_timer(
+          std::chrono::milliseconds(sender_timer_value_), std::bind(&UartCommunication::sender_timer_callback, this));
       // receiver_timer_ = this->create_wall_timer(
       //     std::chrono::milliseconds(receiver_timer_value_), std::bind(&UartCommunication::receiver_timer_callback, this));
     }
@@ -51,7 +57,6 @@ namespace uart_communication
     this->declare_parameter<std::string>("steering_angle_topic", "/default_steering_angle");
     this->declare_parameter<std::string>("throttle_topic", "/default_throttle");
     this->declare_parameter<std::string>("speed_publisher_topic", "/default_speed");
-    
 
     serial_port_ = this->get_parameter("serial_port").as_string();
     serial_baudrate_ = this->get_parameter("serial_baudrate").as_int();
@@ -70,6 +75,20 @@ namespace uart_communication
     RCLCPP_INFO(this->get_logger(), "speed_publisher_topic: %s", speed_publisher_topic_.c_str());
 
     return true;
+  }
+
+  void UartCommunication::steering_callback(const std_msgs::msg::Float32::ConstSharedPtr &steering_angle_msg)
+  {
+    RCLCPP_INFO(this->get_logger(), "Steering callback triggered.");
+    steering_angle = steering_angle_msg->data;
+    steering_ready = true;
+  }
+
+  void UartCommunication::throttle_callback(const std_msgs::msg::Float32::ConstSharedPtr &throttle_msg)
+  {
+    RCLCPP_INFO(this->get_logger(), "Throttle callback triggered.");
+    throttle = throttle_msg->data;
+    throttle_ready = true;
   }
 
   void UartCommunication::receiver_callback(const std_msgs::msg::Float32::ConstSharedPtr &steering_angle_msg, const std_msgs::msg::Float32::ConstSharedPtr &throttle_msg)
@@ -99,13 +118,31 @@ namespace uart_communication
 
   void UartCommunication::sender_timer_callback()
   {
+    if (!steering_ready && !throttle_ready)
+    {
+      RCLCPP_WARN(this->get_logger(), "Waiting for both steering and throttle data.");
+      return;
+    }
+    if (!steering_ready && throttle_ready)
+    {
+      RCLCPP_WARN(this->get_logger(), "Waiting for steering data.");
+      return;
+    }
+    if (steering_ready && !throttle_ready)
+    {
+      RCLCPP_WARN(this->get_logger(), "Waiting for throttle data.");
+      return;
+    }
+
+    
+
     RCLCPP_INFO(this->get_logger(), "Timer callback triggered.");
     try
     {
-      // 2. Mesaj oluştur ve gönder
-      std::string tx_msg = "-15.2,30.0\n";
-      stm->write(tx_msg);
-      RCLCPP_INFO(this->get_logger(), "STM'ye veri gonderildi: %s", tx_msg.c_str());
+      std::ostringstream ss;
+      ss << std::fixed << std::setprecision(1) << steering_angle << "," << throttle << "\n";
+      std::string message = ss.str();
+      send_to_stm(message);
     }
     catch (const std::exception &e)
     {
@@ -138,7 +175,7 @@ namespace uart_communication
         RCLCPP_WARN(this->get_logger(), "Float'a çevirirken hata oluştu: %s", e.what());
       }
     }
-    else 
+    else
     {
       RCLCPP_INFO(this->get_logger(), "STM'den veri alınamadı veya boş veri alındı.");
     }

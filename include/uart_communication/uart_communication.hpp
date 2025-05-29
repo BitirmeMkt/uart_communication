@@ -25,6 +25,10 @@ private:
 
   bool read_parameters();
 
+  void steering_callback(const std_msgs::msg::Float32::ConstSharedPtr &steering_angle_msg);
+
+  void throttle_callback(const std_msgs::msg::Float32::ConstSharedPtr &throttle_msg);
+
   void receiver_callback(const std_msgs::msg::Float32::ConstSharedPtr &steering_angle_msg,
                          const std_msgs::msg::Float32::ConstSharedPtr &throttle_msg);
 
@@ -49,13 +53,25 @@ private:
 
   std::string speed_publisher_topic_;
 
-  message_filters::Subscriber<std_msgs::msg::Float32> steering_angle_subscriber_;
-  message_filters::Subscriber<std_msgs::msg::Float32> throttle_subscriber_;
+  // message_filters::Subscriber<std_msgs::msg::Float32> steering_angle_subscriber_;
+  // message_filters::Subscriber<std_msgs::msg::Float32> throttle_subscriber_;
+
+  rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr steering_angle_subscriber_;
+
+  rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr throttle_subscriber_;
 
   rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr speed_publisher_;;
 
   using SyncPolicy = message_filters::sync_policies::ApproximateTime<std_msgs::msg::Float32, std_msgs::msg::Float32>;
   std::shared_ptr<message_filters::Synchronizer<SyncPolicy>> sync_;
+
+  float steering_angle;
+
+  float throttle;
+
+  bool steering_ready = false;
+
+  bool throttle_ready = false;
 
 };
 

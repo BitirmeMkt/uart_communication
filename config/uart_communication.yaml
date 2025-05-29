@@ -3,7 +3,7 @@ uart_communication_node:
     serial_port: "/dev/ttyUSB0"
     serial_baudrate: 115200
     sender_timer_value: 100 # milliseconds
-    receiver_timer_value: 1000 # milliseconds
+    receiver_timer_value: 100 # milliseconds
     steering_angle_topic: "/steering_angle"
     throttle_topic: "/throttle"
     speed_publisher_topic: "/speed"
